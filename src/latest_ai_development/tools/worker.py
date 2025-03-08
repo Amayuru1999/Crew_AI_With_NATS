@@ -13,19 +13,34 @@ async def crew_worker():
 
         print(f"Received task: {data}")
 
-        # Create a Crew AI agent
-        translator = Agent(name="Translator", role="Language expert")
-        task = Task(description=data, agent=translator)
+        translator = Agent(
+            name="Translator",
+            role="Language expert",
+            goal="Accurately translate texts from various languages.",
+            backstory="A highly trained AI model with expertise in linguistics and translation."
+        )
+
+        task = Task(
+            description=data,
+            agent=translator,
+            expected_output="The translated text in English."
+        )
+
         crew = Crew(agents=[translator], tasks=[task])
 
-        # Execute task
+        # Execute task and get the output
         result = crew.kickoff()
 
-        # Send back the result
-        await nc.publish(subject + ".reply", result.encode())
+        # ✅ Convert result to string before publishing
+        response = str(result)
+        print(f"Sending response: {response}")
 
+        await nc.publish(subject + ".reply", response.encode())
+
+    # ✅ Fix: Subscribe **after** defining `message_handler`
     await nc.subscribe("crew.tasks", cb=message_handler)
     print("Crew AI agent is listening for tasks...")
+
     await asyncio.Future()  # Keeps process running
 
 asyncio.run(crew_worker())
