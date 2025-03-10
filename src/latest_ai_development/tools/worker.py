@@ -13,6 +13,7 @@ async def crew_worker():
 
         print(f"Received task: {data}")
 
+        # ✅ Multiple Agents
         translator = Agent(
             name="Translator",
             role="Language expert",
@@ -20,13 +21,37 @@ async def crew_worker():
             backstory="A highly trained AI model with expertise in linguistics and translation."
         )
 
-        task = Task(
-            description=data,
-            agent=translator,
-            expected_output="The translated text in English."
+        summarizer = Agent(
+            name="Summarizer",
+            role="Content summarizer",
+            goal="Summarize long texts into short, concise summaries.",
+            backstory="An AI model trained in text summarization and NLP."
         )
 
-        crew = Crew(agents=[translator], tasks=[task])
+        qa_agent = Agent(
+            name="QA Bot",
+            role="Question Answering system",
+            goal="Answer questions based on the given context.",
+            backstory="An AI that specializes in answering user queries."
+        )
+
+        # ✅ Agent Selection Based on Task
+        if "translate" in data.lower():
+            selected_agent = translator
+        elif "summarize" in data.lower():
+            selected_agent = summarizer
+        elif "question" in data.lower():
+            selected_agent = qa_agent
+        else:
+            selected_agent = translator  # Default agent
+
+        task = Task(
+            description=data,
+            agent=selected_agent,
+            expected_output="A processed text output based on the request."
+        )
+
+        crew = Crew(agents=[translator, summarizer, qa_agent], tasks=[task])
 
         # Execute task and get the output
         result = crew.kickoff()
@@ -37,9 +62,9 @@ async def crew_worker():
 
         await nc.publish(subject + ".reply", response.encode())
 
-    # ✅ Fix: Subscribe **after** defining `message_handler`
+    # ✅ Subscribe before running the event loop
     await nc.subscribe("crew.tasks", cb=message_handler)
-    print("Crew AI agent is listening for tasks...")
+    print("Crew AI agents are listening for tasks...")
 
     await asyncio.Future()  # Keeps process running
 
