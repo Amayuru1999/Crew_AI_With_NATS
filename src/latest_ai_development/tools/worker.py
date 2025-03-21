@@ -35,6 +35,7 @@ async def crew_worker():
             backstory="An AI that specializes in answering user queries."
         )
 
+
         # ✅ Agent Selection Based on Task
         if "translate" in data.lower():
             selected_agent = translator
