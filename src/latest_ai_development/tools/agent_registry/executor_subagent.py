@@ -2,10 +2,12 @@ import asyncio
 import json
 from nats.aio.client import Client as NATS
 from agent_registry import AgentRegistry
-
+from dotenv import load_dotenv
+load_dotenv()
 EXECUTOR_TOPIC = "agent.executor"
 CREW_RESPONSES_TOPIC = "crew.responses"
 CLIENT_REPLY_TOPIC = "client.final.results"
+
 
 # We'll assume sub-agents each have a NATS topic named: agent.<agent_id>
 # e.g. agent.stock_news_agent, agent.stock_price_agent, etc.

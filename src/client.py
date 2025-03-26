@@ -58,6 +58,6 @@ async def client():
     print("[Client] Sent task to Captain:", task_data)
 
     # Keep running to receive final output
-    await asyncio.sleep(60)
+    await asyncio.sleep(180)
 
 asyncio.run(client())

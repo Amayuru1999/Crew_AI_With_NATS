@@ -2,7 +2,7 @@ import asyncio
 import json
 from nats.aio.client import Client as NATS
 
-STOCK_NEWS_TOPIC = "agent.stock_news"
+STOCK_NEWS_TOPIC = "agent.stock_news_agent"
 CREW_RESPONSES_TOPIC = "crew.responses"
 
 async def stock_news_agent():
