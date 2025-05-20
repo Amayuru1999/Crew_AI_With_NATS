@@ -9,28 +9,34 @@ CAPTAIN_RESPONSE_TOPIC = "crew.captain.responses"
 async def captain_agent():
     nc = NATS()
     await nc.connect("nats://localhost:4222")
-
+    running = True
     async def captain_handler(msg):
-        """Handles user tasks and sends them to the PromptProcessorSubAgent."""
         task_data = json.loads(msg.data.decode())
         print(f"[Captain] Received Task: {task_data}")
-
-        # Forward to PromptProcessorSubAgent
-        await nc.publish(PROMPT_PROCESSOR_TOPIC, json.dumps(task_data).encode())
+        
+        # Wrap the task data
+        wrapped_data = {
+            "original_task_data": task_data
+        }
+        await nc.publish(PROMPT_PROCESSOR_TOPIC, json.dumps(wrapped_data).encode())
 
     # Subscribe to tasks from the client
-    await nc.subscribe(CAPTAIN_TOPIC, cb=captain_handler)
+    sub1 = await nc.subscribe(CAPTAIN_TOPIC, cb=captain_handler)
     print("[Captain] Captain Agent is listening for tasks...")
-
     # Listen for final aggregated results from the ExecutorSubAgent
     async def final_result_handler(msg):
         result = json.loads(msg.data.decode())
         print(f"[Captain] Final Aggregated Result: {result}")
         # In a real system, you'd forward this back to the client
+    sub2 = await nc.subscribe(CAPTAIN_RESPONSE_TOPIC, cb=final_result_handler)
 
-    await nc.subscribe(CAPTAIN_RESPONSE_TOPIC, cb=final_result_handler)
-
-    await asyncio.Future()  # Keep the Captain Agent running
-
+    try:
+        while running:
+            await asyncio.sleep(0.1)
+    except asyncio.CancelledError:
+        await sub1.unsubscribe()
+        await sub2.unsubscribe()
+        await nc.close()
+        raise
 if __name__ == "__main__":
     asyncio.run(captain_agent())

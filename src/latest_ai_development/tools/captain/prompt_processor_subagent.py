@@ -18,6 +18,7 @@ async def prompt_processor_subagent():
 
         # Example: Convert prompt to OP_CODE and contexts
         structured_data = {
+            "task_id": task_data.get("task_id"),  # ← ensure task_id is accessible
             "OP_CODE": "STOCK_RECOMMENDATION",
             "UserContext": {"preference": "short_term_gains"},
             "ProcessContext": {"history": "some conversation data"},
