@@ -3,6 +3,7 @@ import json
 from nats.aio.client import Client as NATS
 from latest_ai_development.tools.agent_registry.agent_registry import AgentRegistry
 from dotenv import load_dotenv
+
 load_dotenv()
 
 EXECUTOR_TOPIC = "agent.executor"
@@ -15,7 +16,6 @@ def extract_task_id(data):
         return "no-id"
     if "task_id" in data and data["task_id"]:
         return data["task_id"]
-    # Check common nested keys recursively
     for key in ["original_task_data"]:
         nested = data.get(key)
         if isinstance(nested, dict):
@@ -27,7 +27,6 @@ def extract_task_id(data):
 async def executor_subagent():
     nc = NATS()
     await nc.connect("nats://localhost:4222")
-    running = True
     registry = AgentRegistry()
 
     tasks_responses = {}
@@ -40,10 +39,13 @@ async def executor_subagent():
         task_id = extract_task_id(structured_data)
         print(f"[Executor] Extracted task_id: {task_id}")
 
+        # You may want to get agents dynamically from registry here, or keep static list:
         all_agent_ids = ["stock_news_agent", "stock_price_agent", "price_predictor_agent"]
 
-        tasks_responses[task_id] = []
-        tasks_expected_count[task_id] = len(all_agent_ids)
+        # Initialize response tracking only if not exists (handle retries)
+        if task_id not in tasks_responses:
+            tasks_responses[task_id] = []
+            tasks_expected_count[task_id] = len(all_agent_ids)
 
         for agent_id in all_agent_ids:
             subagent_data = {
@@ -68,10 +70,13 @@ async def executor_subagent():
             tasks_responses[task_id] = []
 
         agent_name = result_data.get("agent")
+        # Prevent duplicate agent responses
         if not any(response.get("agent") == agent_name for response in tasks_responses[task_id]):
             tasks_responses[task_id].append(result_data)
 
-        if len(tasks_responses[task_id]) >= tasks_expected_count.get(task_id, 0):
+        # Check if all expected responses are collected
+        expected_count = tasks_expected_count.get(task_id, 0)
+        if expected_count > 0 and len(tasks_responses[task_id]) >= expected_count:
             final_result = {
                 "task_id": task_id,
                 "aggregated_results": tasks_responses[task_id]
@@ -79,21 +84,24 @@ async def executor_subagent():
             await nc.publish(CLIENT_REPLY_TOPIC, json.dumps(final_result).encode())
             print(f"[Executor] Publishing final result: {final_result}")
 
-            # Clean up
+            # Clean up tracking
             tasks_responses.pop(task_id, None)
             tasks_expected_count.pop(task_id, None)
 
-    sub1 = await nc.subscribe(EXECUTOR_TOPIC, cb=executor_handler)
-    sub2 = await nc.subscribe(CREW_RESPONSES_TOPIC, cb=subagent_response_handler)
+    # Subscribe to executor commands and crew responses
+    sub_executor = await nc.subscribe(EXECUTOR_TOPIC, cb=executor_handler)
+    sub_responses = await nc.subscribe(CREW_RESPONSES_TOPIC, cb=subagent_response_handler)
 
     print("[Executor] ExecutorSubAgent is running...")
 
     try:
-        while running:
+        # Keep running indefinitely
+        while True:
             await asyncio.sleep(0.1)
     except asyncio.CancelledError:
-        await sub1.unsubscribe()
-        await sub2.unsubscribe()
+        # Cleanup on cancellation
+        await sub_executor.unsubscribe()
+        await sub_responses.unsubscribe()
         await nc.close()
         raise
 

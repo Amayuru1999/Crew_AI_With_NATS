@@ -1,0 +1,4 @@
+fastapi
+uvicorn
+nats-py
+python-dotenv

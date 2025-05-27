@@ -1,42 +1,54 @@
 import asyncio
 import json
 from nats.aio.client import Client as NATS
+from openai import OpenAI
+import os
 
-STOCK_NEWS_TOPIC = "agent.stock_news_agent"
-CREW_RESPONSES_TOPIC = "crew.responses"
+api_key = os.environ.get("OPENAI_API_KEY")
+if not api_key:
+    raise EnvironmentError("Missing OPENAI_API_KEY environment variable.")
 
-def extract_task_id(data):
-    try:
-        return (
-            data.get("task_id")
-            or data.get("original_task_data", {}).get("task_id")
-            or data.get("original_task_data", {}).get("original_task_data", {}).get("task_id")
-            or "no-id"
-        )
-    except Exception:
-        return "no-id"
-
+client = OpenAI(api_key=api_key)
 async def stock_news_agent():
     nc = NATS()
     await nc.connect("nats://localhost:4222")
 
-    async def news_handler(msg):
-        data = json.loads(msg.data.decode())
-        task_id = extract_task_id(data)
-        print(f"[StockNewsAgent] Received: {data}")
+    async def stock_news_handler(msg):
+        task_data = json.loads(msg.data.decode())
+        task_id = task_data.get("task_id")
+        task_description = task_data.get("original_task_data", {}).get("task_description", "")
 
-        # Simulate fetching news
+        print(f"[StockNewsAgent] Received: {task_data}")
+
+        prompt = f"Provide a brief stock market news summary relevant to this user prompt: '{task_description}'. Keep it short and relevant."
+
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You provide stock market news summaries."},
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=100,
+                temperature=0.5,
+            )
+            news_summary = response.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"[StockNewsAgent] OpenAI API error: {e}")
+            news_summary = "Could not retrieve stock news at this time."
+
         result = {
             "task_id": task_id,
             "agent": "StockNewsAgent",
-            "info": "Weekly stock news retrieved..."
+            "info": news_summary,
         }
 
-        # Publish result to ExecutorSubAgent
-        await nc.publish(CREW_RESPONSES_TOPIC, json.dumps(result).encode())
+        await nc.publish("client.final.results", json.dumps(result).encode())
+        print(f"[StockNewsAgent] Published result for task_id {task_id}")
 
-    await nc.subscribe(STOCK_NEWS_TOPIC, cb=news_handler)
+    await nc.subscribe("agent.stock_news_agent", cb=stock_news_handler)
     print("[StockNewsAgent] Listening for tasks...")
+
     await asyncio.Future()
 
 if __name__ == "__main__":
